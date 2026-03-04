@@ -358,6 +358,7 @@ inline NodeStatus RosActionNode<T>::tick() {
     future_goal_handle_ = {};
     on_feedback_state_change_ = NodeStatus::RUNNING;
     result_ = {};
+    goal_handle_ = nullptr;
 
     Goal goal;
 
