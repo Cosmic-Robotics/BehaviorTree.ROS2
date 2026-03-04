@@ -219,6 +219,7 @@ class RosActionNode : public BT::ActionNodeBase {
   NodeStatus on_feedback_state_change_;
   bool goal_received_;
   WrappedResult result_;
+  std::array<uint8_t, 16> current_goal_id_ = {};
 
   bool createClient(const std::string& action_name);
 };
@@ -359,6 +360,7 @@ inline NodeStatus RosActionNode<T>::tick() {
     on_feedback_state_change_ = NodeStatus::RUNNING;
     result_ = {};
     goal_handle_ = nullptr;
+    current_goal_id_ = {};
 
     Goal goal;
 
@@ -380,7 +382,7 @@ inline NodeStatus RosActionNode<T>::tick() {
         };
     //--------------------
     goal_options.result_callback = [this](const WrappedResult& result) {
-      if (goal_handle_ && goal_handle_->get_goal_id() == result.goal_id) {
+      if (goal_handle_ && current_goal_id_ == result.goal_id) {
         RCLCPP_DEBUG(logger(), "result_callback");
         result_ = result;
         emitWakeUpSignal();
@@ -435,6 +437,7 @@ inline NodeStatus RosActionNode<T>::tick() {
         if (!goal_handle_) {
           return CheckStatus(onFailure(GOAL_REJECTED_BY_SERVER));
         }
+	current_goal_id_ = goal_handle_->get_goal_id();
       }
     }
 
