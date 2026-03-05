@@ -204,6 +204,8 @@ class RosActionNode : public BT::ActionNodeBase {
   }
 
   std::weak_ptr<rclcpp::Node> node_;
+  std::shared_ptr<std::atomic<bool>> callback_valid_ =
+      std::make_shared<std::atomic<bool>>(true);
   std::shared_ptr<ActionClientInstance> client_instance_;
   std::string action_name_;
   bool action_name_should_be_checked_ = false;
@@ -361,6 +363,7 @@ inline NodeStatus RosActionNode<T>::tick() {
     result_ = {};
     goal_handle_ = nullptr;
     current_goal_id_ = {};
+    callback_valid_ = std::make_shared<std::atomic<bool>>(true);
 
     Goal goal;
 
@@ -372,22 +375,24 @@ inline NodeStatus RosActionNode<T>::tick() {
 
     //--------------------
     goal_options.feedback_callback =
-        [this](typename GoalHandle::SharedPtr,
-               const std::shared_ptr<const Feedback> feedback) {
+        [this, valid = callback_valid_](
+            typename GoalHandle::SharedPtr,
+            const std::shared_ptr<const Feedback> feedback) {
+          if (!*valid) return;
           on_feedback_state_change_ = onFeedback(feedback);
           if (on_feedback_state_change_ == NodeStatus::IDLE) {
             throw std::logic_error("onFeedback must not return IDLE");
           }
-          emitWakeUpSignal();
         };
     //--------------------
-    goal_options.result_callback = [this](const WrappedResult& result) {
-      if (goal_handle_ && current_goal_id_ == result.goal_id) {
-        RCLCPP_DEBUG(logger(), "result_callback");
-        result_ = result;
-        emitWakeUpSignal();
-      }
-    };
+    goal_options.result_callback =
+        [this, valid = callback_valid_](const WrappedResult& result) {
+          if (!*valid) return;  // Stale callback. Node has moved on.
+          if (current_goal_id_ == result.goal_id) {
+            RCLCPP_DEBUG(logger(), "result_callback");
+            result_ = result;
+          }
+        };
     //--------------------
     goal_options.goal_response_callback =
         [this](typename GoalHandle::SharedPtr const future_handle) {
@@ -437,7 +442,7 @@ inline NodeStatus RosActionNode<T>::tick() {
         if (!goal_handle_) {
           return CheckStatus(onFailure(GOAL_REJECTED_BY_SERVER));
         }
-	current_goal_id_ = goal_handle_->get_goal_id();
+        current_goal_id_ = goal_handle_->get_goal_id();
       }
     }
 
@@ -470,6 +475,7 @@ inline void RosActionNode<T>::halt() {
 
 template <class T>
 inline void RosActionNode<T>::cancelGoal() {
+  *callback_valid_ = false;
   auto& executor = client_instance_->callback_executor;
   if (!goal_handle_) {
     if (future_goal_handle_.valid()) {
