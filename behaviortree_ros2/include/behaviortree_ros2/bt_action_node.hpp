@@ -382,6 +382,7 @@ inline NodeStatus RosActionNode<T>::tick() {
           on_feedback_state_change_ = onFeedback(feedback);
           if (on_feedback_state_change_ == NodeStatus::IDLE) {
             throw std::logic_error("onFeedback must not return IDLE");
+            emitWakeUpSignal();
           }
         };
     //--------------------
@@ -391,6 +392,7 @@ inline NodeStatus RosActionNode<T>::tick() {
           if (current_goal_id_ == result.goal_id) {
             RCLCPP_DEBUG(logger(), "result_callback");
             result_ = result;
+            emitWakeUpSignal();
           }
         };
     //--------------------
